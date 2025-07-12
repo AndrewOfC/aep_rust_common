@@ -1,5 +1,5 @@
 [package]
-name = "rust_common"
+name = "aep_rust_common"
 version = "0.1.0"
 edition = "2024"
 
