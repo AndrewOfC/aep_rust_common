@@ -1,87 +1,106 @@
-use std::fmt::Debug;
-use std::os::unix::raw::ino_t;
-use std::str::FromStr;
-use regex::Regex;
-use yaml_rust::{Yaml, YamlLoader};
+use yaml_rust::Yaml;
 
 
-const KEY_MATCH: usize = 1 ;
-const INDEX_MATCH: usize = 3 ;
+pub(crate) const KEY_MATCH: usize = 1 ;
+pub(crate) const INDEX_MATCH: usize = 3 ;
 
-pub struct YamlDoccer {
-    docs: Vec<Yaml>
-}
+macro_rules! yaml_scalar {
 
-impl YamlDoccer {
-    
-    pub fn new(docstr: &str) -> YamlDoccer {
-        let docs = YamlLoader::load_from_str(docstr).expect("Failed to parse YAML");
-        YamlDoccer { docs }
-    }
-
-    pub fn yaml_descend_path(&self, path: &str) -> Result<&Yaml, String> {
-        let re = Regex::new(r"([^.\[\]\\]+)(\.)?|(?:\[(\d+)]?)?").unwrap();
-        let mut current = &self.docs[0];
-        for captures in re.captures_iter(path) {
-            if captures.get(KEY_MATCH).is_some() {
-                let key = captures.get(KEY_MATCH).unwrap().as_str();
-                match current {
-                    Yaml::Hash(h) => {
-                        current = &h[&Yaml::String(key.to_string())];
-                    }
-                    _ => return Err(format!("{} {} is not a hash", path, key))
-                } // if str
-            } else if captures.get(INDEX_MATCH).is_some() {
-                let index = captures.get(INDEX_MATCH).unwrap().as_str().parse::<usize>().unwrap();
-                match current {
-                    Yaml::Array(a) => {
-                        current = &a[index];
-                    }
-                    _ => return Err(format!("{} {} is not an array", path, index))
-                }
-            } // if index
-            else {
-                return Err(format!("{} is not a valid path", path))
-            }
-        } // for
-        Ok(current)
-    }
-
-
-
-    pub fn yaml_descend_value<T: std::str::FromStr>(&self, path:&str) -> Result<T, String>  {
-        let yaml = self.yaml_descend_path(path).unwrap().clone();
-        match yaml {
-            Yaml::Integer(i) => Ok(i.to_string().parse::<T>().unwrap()),
-            Yaml::Real(r) => Ok(r.parse::<T>().unwrap()),
-            Yaml::String(s) => Ok(s.parse::<T>().unwrap()),
-            _ => Err(format!("{} is not a valid type", path))
+    ($d:expr, $path:expr, i64) => {
+        {
+            let yaml = $d.yaml_descend_path($path).unwrap().clone();
+            yaml.as_i64().unwrap()
         }
-    }
+    } ;
+    ($d:expr, $path:expr, &str) => {
+        {
+            let yaml = $d.yaml_descend_path($path).unwrap().clone();
+            yaml.as_str().unwrap().to_string()
+        }
+    } ;
+    ($d:expr, $path:expr, bool) => {
+        {
+            let yaml = $d.yaml_descend_path($path).unwrap().clone();
+            yaml.as_bool().unwrap()
+        }
+    } ;
+    ($d:expr, $path:expr, f64) => {
+        {
+            let yaml = $d.yaml_descend_path($path).unwrap().clone();
+            yaml.as_f64().unwrap()
+        }
+    } ;
 }
-
-
 
 #[cfg(test)]
 mod tests {
+    use crate::yaml_doccer::YamlDoccer;
     use super::*;
+    
+    const TEST_SOURCE:&str = r"---
+        root:
+            array:
+                - string: str
+                  number: 4
+                  bool: true
+                  real: 2.0
+
+        parent_test:
+            parent:
+                description: 'foo'
+            child1:
+                parent: parent_test.parent
+            child2:
+                parent: parent_test.child1
+" ;
 
     #[test]
     fn test_path() {
-        let src = r"---
-        root:
-            key:
-                - subkey: str
-                  number: 4
+        
+        let doccer = YamlDoccer::new(TEST_SOURCE) ;
 
-" ;
-        let doccer = YamlDoccer::new(src) ;
+        let i = yaml_scalar!(doccer, "root.array[0].number", i64);
+        assert_eq!(i, 4) ;
+        let s = yaml_scalar!(doccer, "root.array[0].string", &str) ;
+        assert_eq!(s, "str") ;
+        let b = yaml_scalar!(doccer, "root.array[0].bool", bool) ;
+        assert_eq!(b, true) ;
+        let f = yaml_scalar!(doccer, "root.array[0].real", f64) ;
+        assert_eq!(f, 2.0) ;
+    }
 
-        let value : String = doccer.yaml_descend_value("root.key[0].subkey").unwrap() ;
-        assert_eq!(value, "str") ;
-        let value: i64 = doccer.yaml_descend_value("root.key[0].number").unwrap() ;
-        assert_eq!(value, 4) ;
+    #[test]
+    #[should_panic(expected = "number in root.array.number is not a hash")]
+    fn test_badvalue_hash() {
+        let doccer = YamlDoccer::new(TEST_SOURCE);
+        let _i = yaml_scalar!(doccer, "root.array.number", &str);
+    }
+    #[test]
+    #[should_panic(expected = "root.array[0].number[1] 1 is not an array")]
+    fn test_badvalue_array() {
+        let doccer = YamlDoccer::new(TEST_SOURCE);
+        let _i = yaml_scalar!(doccer, "root.array[0].number[1]", &str);
+    }
 
+    #[test]
+    #[should_panic(expected = "numberX not found in root.array[0].numberX")]
+    fn test_nosuch_member() {
+        let doccer = YamlDoccer::new(TEST_SOURCE);
+        let _i = yaml_scalar!(doccer, "root.array[0].numberX", &str);
+    }
+
+    #[test]
+    #[should_panic(expected = "100 is out of bounds in root.array[100].number")]
+    fn test_nosuch_index() {
+        let doccer = YamlDoccer::new(TEST_SOURCE);
+        let _i = yaml_scalar!(doccer, "root.array[100].number", &str);
+    }
+
+    #[test]
+    fn test_badvalue_hash2() {
+        let doccer = YamlDoccer::new(TEST_SOURCE);
+        let child = doccer.yaml_descend_path("parent_test.child2").unwrap();
+        let description = doccer.get_field_or_parent(child, "description") ;
     }
 }
 
