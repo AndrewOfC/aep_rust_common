@@ -67,17 +67,17 @@ mod u_tests {
 
     #[test]
     fn test_array1() {
-        input_output_check("array", "array-0\narray-1\narray-2\n") ;
+        input_output_check("array", "array@0\narray@1\narray@2\n") ;
     }
     #[test]
     #[ignore]
     fn test_array2() {
-        input_output_check("array-2", "array-2-0\narray-2-1\narray-2-2\n") ;
+        input_output_check("array@2", "array@2@0\narray@2@1\narray@2@2\n") ;
     }
 
     #[test]
     fn test_array3() {
-        input_output_check("array[", "array-0\narray-1\narray-2\n") ;
+        input_output_check("array[", "array@0\narray@1\narray@2\n") ;
     }
     #[test]
     fn test_field_terminator() {
@@ -97,11 +97,11 @@ mod u_tests {
 
     #[test]
     fn test_gpio_p() {
-        input_output_check("GPIO.p", "GPIO.pins-0\nGPIO.pins-1\n") ;
+        input_output_check("GPIO.p", "GPIO.pins@0\nGPIO.pins@1\n") ;
     }
     #[test]
     fn test_gpio_pin0() {
-        input_output_check("GPIO.pins-0.", "GPIO.pins-0.clear\nGPIO.pins-0.function\nGPIO.pins-0.level\nGPIO.pins-0.set\n") ;
+        input_output_check("GPIO.pins@0.", "GPIO.pins@0.clear\nGPIO.pins@0.function\nGPIO.pins@0.level\nGPIO.pins@0.set\n") ;
     }
 
     #[test]
@@ -119,13 +119,13 @@ mod u_tests {
 
         let doccer = YamlDescender::new(TEST_SOURCE) ;
 
-        let i = yaml_scalar!(doccer, "root.array-0.number", i64);
+        let i = yaml_scalar!(doccer, "root.array@0.number", i64);
         assert_eq!(i, 4) ;
-        let s = yaml_scalar!(doccer, "root.array-0.string", &str) ;
+        let s = yaml_scalar!(doccer, "root.array@0.string", &str) ;
         assert_eq!(s, "str") ;
-        let b = yaml_scalar!(doccer, "root.array-0.bool", bool) ;
+        let b = yaml_scalar!(doccer, "root.array@0.bool", bool) ;
         assert_eq!(b, true) ;
-        let f = yaml_scalar!(doccer, "root.array-0.real", f64) ;
+        let f = yaml_scalar!(doccer, "root.array@0.real", f64) ;
         assert_eq!(f, 2.0) ;
     }
 
@@ -136,24 +136,24 @@ mod u_tests {
         let _i = crate::yaml_scalar!(doccer, "root.array.number", &str);
     }
     #[test]
-    #[should_panic(expected = "root.array-0.number-1 1 is not an array")]
+    #[should_panic(expected = "root.array@0.number@1 1 is not an array")]
     fn test_badvalue_array() {
         let doccer = YamlDescender::new(TEST_SOURCE);
-        let _i = crate::yaml_scalar!(doccer, "root.array-0.number-1", &str);
+        let _i = crate::yaml_scalar!(doccer, "root.array@0.number@1", &str);
     }
 
     #[test]
-    #[should_panic(expected = "numberX not found in root.array-0.numberX")]
+    #[should_panic(expected = "numberX not found in root.array@0.numberX")]
     fn test_nosuch_member() {
         let doccer = YamlDescender::new(TEST_SOURCE);
-        let _i = crate::yaml_scalar!(doccer, "root.array-0.numberX", &str);
+        let _i = crate::yaml_scalar!(doccer, "root.array@0.numberX", &str);
     }
 
     #[test]
-    #[should_panic(expected = "100 is out of bounds in root.array-100.number")]
+    #[should_panic(expected = "100 is out of bounds in root.array@100.number")]
     fn test_nosuch_index() {
         let doccer = YamlDescender::new(TEST_SOURCE);
-        let _i = crate::yaml_scalar!(doccer, "root.array-100.number", &str);
+        let _i = crate::yaml_scalar!(doccer, "root.array@100.number", &str);
     }
 
     #[test]
