@@ -21,9 +21,9 @@ pub struct YamlDescender {
 /// Descends into tree like objects such as yaml or (coming soon) json
 impl YamlDescender {
     // traditional array accessor "([^.\[\]\\]+)(\.)?|(?:\[(\d+)]?)?"
-    // more zsh friendly "([^.\[\]\\-]+)(\.)?|(?:-(\d+))?"gm
+    // more zsh friendly "([^.\[\]\\@]+)(\.)?|(?:@(\d+))?"
     pub fn get_re() -> Regex {
-        Regex::new(r"([^.\[\]\\-]+)(\.)?|(?:-(\d+))?").unwrap()
+        Regex::new(r"([^.\[\]\\@]+)(\.)?|(?:@(\d+))?").unwrap()
     }
 
     fn get_parent_key() -> Yaml {
@@ -61,6 +61,9 @@ impl YamlDescender {
     pub fn yaml_descend_path(&self, path: &str) -> Result<&Yaml, String> {
         let re = &self.re ;
         let mut current = &self.docs[0];
+        if path == "" {
+            return Ok(current);
+        }
 
         if self.root.as_str().unwrap() != "" {
             match current {
@@ -131,8 +134,10 @@ impl YamlDescender {
 
 impl Descender<dyn Write> for YamlDescender {
 
-    fn set_root(&mut self, path: &str) {
+    fn set_root(&mut self, path: &str) -> Result<String, String> {
+        let old_root = self.root.as_str().unwrap().to_string();
         self.root = Yaml::String(path.to_string());
+        Ok(old_root) 
     }
 
     fn get_string_field_or_parent(&self, path: &str, field: &str) -> Result<String, String> {
@@ -148,7 +153,10 @@ impl Descender<dyn Write> for YamlDescender {
     }
 
     fn get_int_field_or_parent(&self, path: &str, field: &str) -> Result<i64, String> {
-        let child = self.yaml_descend_path(path).unwrap();
+        let child = match self.yaml_descend_path(path) {
+            Ok(yaml) => yaml,
+            Err(e) => return Err(e)
+        };
         let value_r = self.get_field_or_parent(&child, field) ;
         match value_r {
             Ok(v) => match v {
@@ -187,16 +195,7 @@ impl Descender<dyn Write> for YamlDescender {
         }
 
     }
-/*
-    fn get_child(self, path: &str) -> Result<Self, String>
-    where
-        Self: Sized
-    {
-        todo!()
-    }*/
-
-
-
+    
     fn write_completions(&self, writer: &mut dyn Write, ipath: &str, add_descriptions: bool, zsh_mode: bool) -> std::io::Result<()>
     {
         let mut path = ipath ;
@@ -276,14 +275,14 @@ impl Descender<dyn Write> for YamlDescender {
                                 return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "Index out of bounds"));
                             }
                             current = &array[index];
-                            current_path += format!("-{}", index).as_str();
+                            current_path += format!("@{}", index).as_str();
                             if !metadata.has_terminal_field(current) {
                                 current_path += sep(current, empty_path);
                             }
                             break;
                         }
                         if array.len() == 1 {
-                            current_path += "-0";
+                            current_path += "@0";
                             empty_path = false;
                             current = &array[0];
                             if !metadata.has_terminal_field(current) {
@@ -294,10 +293,10 @@ impl Descender<dyn Write> for YamlDescender {
                         for (index, _) in array.iter().enumerate() {
                             let mut path2 = current_path.to_string();
 
-                            if path2.ends_with("-") {
+                            if path2.ends_with("@") {
                                 path2.truncate(path.len() - 1);
                             }
-                            let index_str = format!("-{}", index);
+                            let index_str = format!("@{}", index);
                             writer.write_fmt(format_args!("{}{}\n", path2, index_str))?;
                         }
                         return Ok(());
