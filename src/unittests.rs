@@ -8,7 +8,8 @@ field2: foo
 "# ;
 
 mod u_tests {
-    use crate::descender::Descender;
+    use crate::yaml_path::yaml_path;
+use crate::descender::Descender;
     use crate::find_config_file::find_config_file;
     use crate::strwriter::StrWriter;
     use crate::unittests::SOURCE1;
@@ -41,7 +42,7 @@ mod u_tests {
     fn input_output_check(input: &str, output: &str) {
         let d = get_descender();
         let mut result_buffer = StrWriter::new() ;
-        d.write_completions(&mut result_buffer, &input, false, false).expect("write failed") ;
+        d.write_completions(&mut result_buffer, &input, false).expect("write failed") ;
         let result_str = result_buffer.to_string().expect("write failed") ;
         assert_eq!(result_str, output);
     }
@@ -50,7 +51,7 @@ mod u_tests {
     fn test_empty() {
         let d  = Box::new(YamlDescender::new(SOURCE1));
         let mut output = BufWriter::new(Vec::new());
-        d.write_completions(&mut output, "", false, false).expect("write failed") ;
+        d.write_completions(&mut output, "", false).expect("write failed") ;
         let s = String::from_utf8(output.into_inner().unwrap()).unwrap();
         assert_eq!(s, "field1\nfield2\n");
     }
@@ -59,7 +60,7 @@ mod u_tests {
     fn test_one_path() {
         let d  = Box::new(YamlDescender::new(SOURCE1));
         let mut output = BufWriter::new(Vec::new());
-        d.write_completions(&mut output, "f", false, false).expect("write failed") ;
+        d.write_completions(&mut output, "f", false).expect("write failed") ;
         let s = String::from_utf8(output.into_inner().unwrap()).unwrap();
         assert_eq!(s, "field1\nfield2\n");
     }
@@ -116,44 +117,44 @@ mod u_tests {
 
     #[test]
     fn test_path() {
+        let yaml = Yaml::from_str(TEST_SOURCE) ;
 
-        let doccer = YamlDescender::new(TEST_SOURCE) ;
 
-        let i = yaml_scalar!(doccer, "root.array@0.number", i64);
+        let i = yaml_scalar!(&yaml, "root.array@0.number", i64);
         assert_eq!(i, 4) ;
-        let s = yaml_scalar!(doccer, "root.array@0.string", &str) ;
+        let s = yaml_scalar!(&yaml, "root.array@0.string", &str) ;
         assert_eq!(s, "str") ;
-        let b = yaml_scalar!(doccer, "root.array@0.bool", bool) ;
+        let b = yaml_scalar!(&yaml, "root.array@0.bool", bool) ;
         assert_eq!(b, true) ;
-        let f = yaml_scalar!(doccer, "root.array@0.real", f64) ;
+        let f = yaml_scalar!(&yaml, "root.array@0.real", f64) ;
         assert_eq!(f, 2.0) ;
     }
 
     #[test]
     #[should_panic(expected = "number in root.array.number is not a hash")]
     fn test_badvalue_hash() {
-        let doccer = YamlDescender::new(TEST_SOURCE);
-        let _i = crate::yaml_scalar!(doccer, "root.array.number", &str);
+        let yaml = Yaml::from_str(TEST_SOURCE) ;
+        let _i = yaml_scalar!(&yaml, "root.array.number", &str);
     }
     #[test]
     #[should_panic(expected = "root.array@0.number@1 1 is not an array")]
     fn test_badvalue_array() {
-        let doccer = YamlDescender::new(TEST_SOURCE);
-        let _i = crate::yaml_scalar!(doccer, "root.array@0.number@1", &str);
+        let yaml = Yaml::from_str(TEST_SOURCE) ;
+        let _i = yaml_scalar!(&yaml, "root.array@0.number@1", &str);
     }
 
     #[test]
     #[should_panic(expected = "numberX not found in root.array@0.numberX")]
     fn test_nosuch_member() {
-        let doccer = YamlDescender::new(TEST_SOURCE);
-        let _i = crate::yaml_scalar!(doccer, "root.array@0.numberX", &str);
+        let doccer = Yaml::from_str(TEST_SOURCE) ;
+        let _i = crate::yaml_scalar!(&doccer, "root.array@0.numberX", &str);
     }
 
     #[test]
     #[should_panic(expected = "100 is out of bounds in root.array@100.number")]
     fn test_nosuch_index() {
-        let doccer = YamlDescender::new(TEST_SOURCE);
-        let _i = crate::yaml_scalar!(doccer, "root.array@100.number", &str);
+        let doccer = Yaml::from_str(TEST_SOURCE) ;
+        let _i = crate::yaml_scalar!(&doccer, "root.array@100.number", &str);
     }
 
     #[test]

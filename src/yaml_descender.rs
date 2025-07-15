@@ -4,6 +4,8 @@ use yaml_rust::{Yaml, YamlLoader};
 use regex::Regex;
 use crate::descender::Descender;
 use crate::rust_common::{keys_starting_with, sep};
+use crate::yaml_path;
+use crate::yaml_path::yaml_path;
 
 const  WHOLE_MATCH: usize = 0 ;
 const KEY_MATCH: usize = 1 ;
@@ -16,6 +18,9 @@ pub struct YamlDescender {
     root: Yaml,
     re: Regex,
     parent_key: Yaml,
+    description_key: Yaml,
+    terminal_field: Yaml,
+    has_terminus: bool,
 }
 
 /// Descends into tree like objects such as yaml or (coming soon) json
@@ -30,11 +35,25 @@ impl YamlDescender {
         Yaml::String("parent".to_string())
     }
 
+    fn get_description_key() -> Yaml {
+        Yaml::String("description".to_string())
+    }
+
     pub fn new(docstr: &str) -> YamlDescender {
         let docs = YamlLoader::load_from_str(docstr).expect("Failed to parse YAML");
+
+        let root = yaml_path(&docs[0], "completion-metadata.root").unwrap_or(Yaml::String("".to_string()));
+        let terminal_field = yaml_path(&docs[0], "completion-metadata.terminus").unwrap_or(Yaml::String("".to_string()));
+        let has_terminus = terminal_field.as_str().unwrap() != "" ;
         let re = YamlDescender::get_re() ;
         let parent_key = Self::get_parent_key();
-        YamlDescender { docs, re, parent_key, root: Yaml::String("".to_string()) }
+        YamlDescender {
+            docs,
+            re, parent_key, root: root,
+            description_key: Self::get_description_key(),
+            terminal_field: terminal_field,
+            has_terminus: has_terminus
+        }
     }
 
     pub fn new_from_file(path: &str) -> YamlDescender {
@@ -47,11 +66,18 @@ impl YamlDescender {
         match yaml {
             Yaml::Hash(_h) => {
                 Ok(YamlDescender { docs: vec![yaml.clone()],
-                    re: Self::get_re(), parent_key: Self::get_parent_key(), root: Yaml::String("".to_string()) })
+                    re: Self::get_re(), parent_key: Self::get_parent_key(), root: Yaml::String("".to_string()),
+                    description_key: Self::get_description_key(),
+                    terminal_field: Yaml::String("".to_string()), has_terminus: false,
+                })
             }
             Yaml::Array(_a) => {
                 Ok(YamlDescender { docs: vec![yaml.clone()],
-                    re: Self::get_re(), parent_key: Self::get_parent_key(), root: Yaml::String("".to_string()) })
+                    re: Self::get_re(), parent_key: Self::get_parent_key(),
+                    root: Yaml::String("".to_string()),
+                description_key: Self::get_description_key(),
+                    terminal_field: Yaml::String("".to_string()), has_terminus: false,
+                },)
             }
             _ => { return Err(String::from("cannot create from scalar types"))}
         }
@@ -195,14 +221,22 @@ impl Descender<dyn Write> for YamlDescender {
         }
 
     }
-    
-    fn write_completions(&self, writer: &mut dyn Write, ipath: &str, add_descriptions: bool, zsh_mode: bool) -> std::io::Result<()>
+
+    fn has_terminal_field(&self, yaml: &Yaml) -> bool {
+        self.has_terminus && match yaml {
+            Yaml::Hash(h) => {
+                 h.contains_key(&self.terminal_field)
+            },
+            _ => { false }
+        }
+    }
+
+    fn write_completions(&self, writer: &mut dyn Write, ipath: &str, add_descriptions: bool) -> std::io::Result<()>
     {
         let mut path = ipath ;
         let doc = &self.docs[0] ;
         let re = YamlDescender::get_re() ;
-        let metadata = self.get_metadata(&self.docs[0], add_descriptions) ;
-        let mut current = if !metadata.has_root() { doc } else { &doc.as_hash().unwrap()[&metadata.root] } ;
+        let mut current = if self.root.as_str().unwrap() == "" { doc } else { &doc.as_hash().unwrap()[&self.root] } ;
         let mut current_path = String::from("") ;
         let mut empty_path = true ;
         let mut match_iter = re.captures_iter(path).peekable();
@@ -234,7 +268,7 @@ impl Descender<dyn Write> for YamlDescender {
                             continue;
                         }
 
-                        let keys = keys_starting_with(&key, hash, &metadata.ignore_fields);
+                        let keys = keys_starting_with(&key, hash, &Default::default());
                         if keys.is_empty() { return Ok(()); }
 
                         if keys.len() == 1 {
@@ -244,7 +278,7 @@ impl Descender<dyn Write> for YamlDescender {
                                 key = ykey.as_str().unwrap();
                                 current_path += ykey.as_str().unwrap();
                                 empty_path = false;
-                                if !metadata.has_terminal_field(current) {
+                                if !self.has_terminal_field(current) {
                                     current_path += sep(current, empty_path);
                                 }
                                 if !last { break; }
@@ -264,8 +298,37 @@ impl Descender<dyn Write> for YamlDescender {
                         }
 
                         let sep = sep(current, empty_path);
+                        let mut has_descriptions = add_descriptions ;
+                        let mut completions:Vec<String> = Vec::new() ;
+                        let mut descriptions:Vec<String> = Vec::new() ;
                         for key in keys.iter().map(|k| k.as_str().unwrap()) {
-                            writer.write_fmt(format_args!("{}{}\n", current_path, key))?;
+                            //writer.write_fmt(format_args!("{}{}\n", current_path, key))?;
+                            completions.push(format_args!("{}{}", current_path, key).to_string());
+                            if has_descriptions {
+                                let description = self.get_description(&hash[&Yaml::String(key.to_string())]);
+                                match description {
+                                    Ok(d) => {
+                                        descriptions.push(d);
+                                    }
+                                    Err(_) => {
+                                        has_descriptions = false;
+                                        continue ;
+                                    }
+                                }
+                            } // has_descriptions
+                        } // for
+                        if has_descriptions {
+                            println!("__descriptions__"); // tag for zsh completion function
+                        }
+                        if has_descriptions {
+                            for (i, c) in completions.iter().enumerate() {
+                                writer.write_fmt(format_args!("{}\n{}\n", c, descriptions[i]))?;
+                            }
+                        }
+                        else {
+                            for c in completions {
+                                writer.write_fmt(format_args!("{}\n", c))?;
+                            }
                         }
                         return Ok(());
                     }
@@ -276,7 +339,7 @@ impl Descender<dyn Write> for YamlDescender {
                             }
                             current = &array[index];
                             current_path += format!("@{}", index).as_str();
-                            if !metadata.has_terminal_field(current) {
+                            if !self.has_terminal_field(current) {
                                 current_path += sep(current, empty_path);
                             }
                             break;
@@ -285,7 +348,7 @@ impl Descender<dyn Write> for YamlDescender {
                             current_path += "@0";
                             empty_path = false;
                             current = &array[0];
-                            if !metadata.has_terminal_field(current) {
+                            if !self.has_terminal_field(current) {
                                 current_path += sep(current, empty_path);
                             }
                             break;
@@ -309,5 +372,22 @@ impl Descender<dyn Write> for YamlDescender {
         Ok(())
     }
 
+    fn get_description(&self, yaml: &Yaml) -> Result<String, String> {
+        match(yaml) {
+            Yaml::Hash(h) => {
+                if h.contains_key(&self.description_key) {
+                    let description = h[&self.description_key].as_str().unwrap();
+                    return Ok(description.to_string());
+                }
+                if h.contains_key(&self.parent_key) {
+                    let parent_path = h[&self.parent_key].as_str().unwrap();
+                    let parent= self.yaml_descend_path(parent_path).unwrap() ;
+                    return Ok(self.get_description(&parent).unwrap()) ;
+                }
+                return Err("no description found".to_string());
+            }
+            _ => return Err(format!("{:?} is not a hash", yaml))
+        }
 
+    }
 }
