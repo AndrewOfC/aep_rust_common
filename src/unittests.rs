@@ -14,9 +14,10 @@ use crate::descender::Descender;
     use crate::strwriter::StrWriter;
     use crate::unittests::SOURCE1;
     use crate::yaml_descender::YamlDescender;
-    use crate::yaml_scalar;
+    use crate::{yaml_scalar};
     use std::io::{BufWriter, Write};
-    use yaml_rust::Yaml;
+    use lazy_static::lazy_static;
+    use yaml_rust::{Yaml, YamlLoader};
 
     const TEST_SOURCE:&str = r"---
         root:
@@ -34,6 +35,10 @@ use crate::descender::Descender;
             child2:
                 parent: parent_test.child1
 " ;
+
+    lazy_static! {
+        static ref YamlData: Yaml = YamlLoader::load_from_str(TEST_SOURCE).unwrap()[0].clone() ;
+    }
 
     fn get_descender() -> Box<dyn Descender<dyn Write>> {
         Box::new(YamlDescender::new_from_file("test_data.yaml"))
@@ -117,44 +122,48 @@ use crate::descender::Descender;
 
     #[test]
     fn test_path() {
-        let yaml = Yaml::from_str(TEST_SOURCE) ;
 
+        let i = yaml_scalar!(&YamlData, "root.array@0.number", i64);
+        assert_eq!(i, Ok(4)) ;
+        let s = yaml_scalar!(&YamlData, "root.array@0.string", String) ;
+        assert_eq!(s, Ok("str".to_string())) ;
+        let b = yaml_scalar!(&YamlData, "root.array@0.bool", bool) ;
+        assert_eq!(b, Ok(true)) ;
+        let f = yaml_scalar!(&YamlData, "root.array@0.real", f64) ;
+        assert_eq!(f, Ok(2.0)) ;
+    }
 
-        let i = yaml_scalar!(&yaml, "root.array@0.number", i64);
-        assert_eq!(i, 4) ;
-        let s = yaml_scalar!(&yaml, "root.array@0.string", &str) ;
-        assert_eq!(s, "str") ;
-        let b = yaml_scalar!(&yaml, "root.array@0.bool", bool) ;
-        assert_eq!(b, true) ;
-        let f = yaml_scalar!(&yaml, "root.array@0.real", f64) ;
-        assert_eq!(f, 2.0) ;
+    #[test]
+    #[should_panic]
+    fn test_safe_path_error() {
+        let yaml =  &YamlData ;
+        let f = yaml_scalar!(yaml, "foo.array@0.real", f64) ;
+        assert_eq!(f.unwrap(), 2.0) ;
     }
 
     #[test]
     #[should_panic(expected = "number in root.array.number is not a hash")]
     fn test_badvalue_hash() {
-        let yaml = Yaml::from_str(TEST_SOURCE) ;
-        let _i = yaml_scalar!(&yaml, "root.array.number", &str);
+        let yaml =  &YamlData ;
+        let _i = yaml_scalar!(yaml, "root.array.number", i64).unwrap();
     }
     #[test]
     #[should_panic(expected = "root.array@0.number@1 1 is not an array")]
     fn test_badvalue_array() {
-        let yaml = Yaml::from_str(TEST_SOURCE) ;
-        let _i = yaml_scalar!(&yaml, "root.array@0.number@1", &str);
+        let yaml = &YamlData ;
+        let _i = yaml_scalar!(yaml, "root.array@0.number@1", i64).unwrap();
     }
 
     #[test]
     #[should_panic(expected = "numberX not found in root.array@0.numberX")]
     fn test_nosuch_member() {
-        let doccer = Yaml::from_str(TEST_SOURCE) ;
-        let _i = crate::yaml_scalar!(&doccer, "root.array@0.numberX", &str);
+        let _i = crate::yaml_scalar!(&YamlData, "root.array@0.numberX", i64).unwrap();
     }
 
     #[test]
     #[should_panic(expected = "100 is out of bounds in root.array@100.number")]
     fn test_nosuch_index() {
-        let doccer = Yaml::from_str(TEST_SOURCE) ;
-        let _i = crate::yaml_scalar!(&doccer, "root.array@100.number", &str);
+        let _i = crate::yaml_scalar!(&YamlData, "root.array@100.number", i64).unwrap();
     }
 
     #[test]

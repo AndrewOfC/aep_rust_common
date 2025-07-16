@@ -373,7 +373,7 @@ impl Descender<dyn Write> for YamlDescender {
     }
 
     fn get_description(&self, yaml: &Yaml) -> Result<String, String> {
-        match(yaml) {
+        match yaml {
             Yaml::Hash(h) => {
                 if h.contains_key(&self.description_key) {
                     let description = h[&self.description_key].as_str().unwrap();

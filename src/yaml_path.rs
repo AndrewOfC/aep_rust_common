@@ -13,35 +13,11 @@ lazy_static! {
     static ref RE: Regex = Regex::new(r"([^.\[\]\\@]+)(\.)?|(?:@(\d+))?").unwrap();
 }
 
-#[macro_export] macro_rules! yaml_scalar {
-
-    ($yaml:expr, $path:expr, i64) => {
-        {
-            let yaml = yaml_path($yaml, $path).unwrap().clone();
-            yaml.as_i64().unwrap()
-        }
-    } ;
-    ($yaml:expr, $path:expr, &str) => {
-        {
-            let yaml = yaml_path($yaml, $path).unwrap().clone();
-            yaml.as_str().unwrap().to_string()
-        }
-    } ;
-    ($yaml:expr, $path:expr, bool) => {
-        {
-            let yaml = yaml_path($yaml, $path).unwrap().clone();
-            yaml.as_bool().unwrap()
-        }
-    } ;
-    ($yaml:expr, $path:expr, f64) => {
-        {
-            let yaml = yaml_path($yaml, $path).unwrap().clone();
-            yaml.as_f64().unwrap()
-        }
-    } ;
-}
-
-
+///
+/// Extract a value from a yaml tree given a 'path'
+/// '.' will separate hash members
+/// '@n' where n is an index into a list
+///
 pub fn yaml_path(yaml: &Yaml, path: &str) -> Result<Yaml, String>
 {
     let mut current = yaml;
@@ -75,4 +51,64 @@ pub fn yaml_path(yaml: &Yaml, path: &str) -> Result<Yaml, String>
             }
         } 
     Ok(current.clone())
+}
+
+/// extract a value in the rustiest way possible
+#[macro_export] macro_rules! yaml_scalar {
+    ($yaml:expr, $path:expr, f64) => {
+        {
+           match yaml_path($yaml, $path) {
+                Ok(y) => {
+                    match y.as_f64() {
+                        Some(v) => Ok(v) as Result<f64, String>,
+                        None => Err(format!("{} is not a float", $path))
+                    }
+
+                }
+                Err(e) => Err(e)
+                }
+        }
+    } ;
+    ($yaml:expr, $path:expr, i64) => {
+        {
+           match yaml_path($yaml, $path) {
+                Ok(y) => {
+                    match y.as_i64() {
+                        Some(v) => Ok(v) as Result<i64, String>,
+                        None => Err(format!("{} is not a float", $path))
+                    }
+                }
+                Err(e) => Err(e)
+                }
+        }
+    } ;
+        ($yaml:expr, $path:expr, bool) => {
+        {
+           match yaml_path($yaml, $path) {
+                Ok(y) => {
+                    match y.as_bool() {
+                        Some(v) => Ok(v) as Result<bool, String>,
+                        None => Err(format!("{} is not a float", $path))
+                    }
+
+                }
+                Err(e) => Err(e)
+                }
+           }
+    } ;
+        ($yaml:expr, $path:expr, String) => {
+        {
+           match yaml_path($yaml, $path) {
+                Ok(y) => {
+                    match y.as_str() {
+                        Some(v) => Ok(v.to_string()) as Result<String, String>,
+                        None => Err(format!("{} is not a float", $path))
+                    }
+
+                }
+                Err(e) => Err(e) 
+                }
+        }
+    } ;
+
 }
