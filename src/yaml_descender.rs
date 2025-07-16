@@ -301,7 +301,8 @@ impl Descender<dyn Write> for YamlDescender {
                         let mut has_descriptions = add_descriptions ;
                         let mut completions:Vec<String> = Vec::new() ;
                         let mut descriptions:Vec<String> = Vec::new() ;
-                        for key in keys.iter().map(|k| k.as_str().unwrap()) {
+
+                        for key in keys.iter().map(|k| k.as_str().unwrap()) { // |k| k.as_str().unwrap()
                             //writer.write_fmt(format_args!("{}{}\n", current_path, key))?;
                             completions.push(format_args!("{}{}", current_path, key).to_string());
                             if has_descriptions {
@@ -376,13 +377,18 @@ impl Descender<dyn Write> for YamlDescender {
         match yaml {
             Yaml::Hash(h) => {
                 if h.contains_key(&self.description_key) {
-                    let description = h[&self.description_key].as_str().unwrap();
-                    return Ok(description.to_string());
+                    let description : &str = match h[&self.description_key].as_str() {
+                        Some(s) => return Ok(s.to_string()),
+                        None => {return Err("description is not a string".to_string()) ;}
+                    } ;
                 }
                 if h.contains_key(&self.parent_key) {
                     let parent_path = h[&self.parent_key].as_str().unwrap();
-                    let parent= self.yaml_descend_path(parent_path).unwrap() ;
-                    return Ok(self.get_description(&parent).unwrap()) ;
+                    let parent= match self.yaml_descend_path(parent_path) {
+                        Ok(p) => p,
+                        Err(e) => return Err(e)
+                    } ;
+                    return self.get_description(&parent);
                 }
                 return Err("no description found".to_string());
             }
