@@ -11,6 +11,7 @@ const ARRAY_MATCH: usize = 4;
 
 lazy_static! {
     static ref RE: Regex = Regex::new(r"([^.\[\]\\@]+)(\.)?|(?:@(\d+))?").unwrap();
+    static ref ParentKey : Yaml = Yaml::String("parent".to_string());
 }
 
 ///
@@ -72,6 +73,31 @@ pub fn yaml_path_field(yaml: &Yaml, path: &str, field: &str) -> Result<Yaml, Str
             _ => Err(format!("{} is not a hash", path)),
         },
         Err(e) => Err(e),
+    }
+}
+
+pub fn yaml_field_parent(root: &Yaml, yaml: &Yaml, field: &str) -> Result<Yaml, String> {
+    match yaml {
+        Yaml::Hash(h) => {
+            let ykey = Yaml::String(field.to_string());
+            if !h.contains_key(&ykey) {
+                if h.contains_key(&ParentKey) {
+                    let parent_path = match &h[&ParentKey] {
+                        Yaml::String(s) => s.to_string(),
+                        _ => return Err(format!("{:?} is not a string", &h[&ParentKey])),
+                    } ;
+
+                    let parent_yaml = match yaml_path(root, &parent_path) {
+                        Ok(y) => y,
+                        Err(e) => return Err(e),
+                    } ;
+                    return yaml_field_parent(root, &parent_yaml, field) ;
+                }
+                return Err(format!("{} not found", field)) ;
+            }
+            Ok(h[&ykey].clone())
+        }
+        _ => Err(format!("{} is not a hash", path)),
     }
 }
 
@@ -150,5 +176,11 @@ macro_rules! yaml_scalar {
             Err(e) => Err(e),
         }
     }};
+
+}
+
+#[macro_export]
+macro_rules! yaml_scalar_parent {
+
 
 }
