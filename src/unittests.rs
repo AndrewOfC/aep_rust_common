@@ -8,8 +8,9 @@ field2: foo
 "# ;
 
 mod u_tests {
+    use crate::yaml_path::yaml_path_field;
     use crate::yaml_path::yaml_path;
-use crate::descender::Descender;
+    use crate::descender::Descender;
     use crate::find_config_file::find_config_file;
     use crate::strwriter::StrWriter;
     use crate::unittests::SOURCE1;
@@ -125,12 +126,23 @@ use crate::descender::Descender;
 
         let i = yaml_scalar!(&YamlData, "root.array@0.number", i64);
         assert_eq!(i, Ok(4)) ;
+        let i2 = yaml_scalar!(&YamlData, "root.array@0", "number", i64);
+        assert_eq!(i2, Ok(4)) ;
+
         let s = yaml_scalar!(&YamlData, "root.array@0.string", String) ;
         assert_eq!(s, Ok("str".to_string())) ;
+        let s2 = yaml_scalar!(&YamlData, "root.array@0", "string", String) ;
+        assert_eq!(s2, Ok("str".to_string())) ;
+
         let b = yaml_scalar!(&YamlData, "root.array@0.bool", bool) ;
         assert_eq!(b, Ok(true)) ;
+        let b2 = yaml_scalar!(&YamlData, "root.array@0", "bool", bool) ;
+        assert_eq!(b2, Ok(true)) ;
+
         let f = yaml_scalar!(&YamlData, "root.array@0.real", f64) ;
         assert_eq!(f, Ok(2.0)) ;
+        let f2 = yaml_scalar!(&YamlData, "root.array@0", "real", f64) ;
+        assert_eq!(f2, Ok(2.0)) ;
     }
 
     #[test]
