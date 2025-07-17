@@ -167,7 +167,11 @@ impl Descender<dyn Write> for YamlDescender {
     }
 
     fn get_string_field_or_parent(&self, path: &str, field: &str) -> Result<String, String> {
-        let child = self.yaml_descend_path(path).unwrap();
+        let keyvector = self.docs[0].as_hash().unwrap().keys().collect::<Vec<&Yaml>>();
+        let child = match self.yaml_descend_path(path) {
+            Ok(yaml) => yaml,
+            Err(e) => return Err(e)
+        } ;
         let value = self.get_field_or_parent(&child, field) ;
         match value {
             Ok(v) => match v {
