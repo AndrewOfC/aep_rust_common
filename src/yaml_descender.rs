@@ -42,7 +42,7 @@ impl YamlDescender {
     pub fn new(docstr: &str) -> YamlDescender {
         let docs = YamlLoader::load_from_str(docstr).expect("Failed to parse YAML");
 
-        let root = yaml_path(&docs[0], "completion-metadata.root").unwrap_or(Yaml::String("".to_string()));
+        let root = Yaml::String("".to_string());
         let terminal_field = yaml_path(&docs[0], "completion-metadata.terminus").unwrap_or(Yaml::String("".to_string()));
         let has_terminus = terminal_field.as_str().unwrap() != "" ;
         let re = YamlDescender::get_re() ;
@@ -111,7 +111,7 @@ impl YamlDescender {
                     Yaml::Hash(h) => {
                         let ykey = Yaml::String(key.to_string());
                         if !h.contains_key(&ykey) {
-                            return Err(format!("{} not found in {}", key, path));
+                            return Err(format!("{} not found", key));
                         }
                         current = &h[&ykey];
                     }
@@ -185,7 +185,7 @@ impl Descender<dyn Write> for YamlDescender {
     fn get_int_field_or_parent(&self, path: &str, field: &str) -> Result<i64, String> {
         let child = match self.yaml_descend_path(path) {
             Ok(yaml) => yaml,
-            Err(e) => return Err(e)
+            Err(e) => return Err(format!("{}.{} not found", path, field))
         };
         let value_r = self.get_field_or_parent(&child, field) ;
         match value_r {
