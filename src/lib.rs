@@ -6,4 +6,5 @@ mod get_metadata;
 mod unittests;
 mod strwriter;
 mod yaml_path;
+mod arrayparser;
 

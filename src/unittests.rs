@@ -39,14 +39,12 @@ mod u_tests {
 
     lazy_static! {
         static ref YamlData: Yaml = YamlLoader::load_from_str(TEST_SOURCE).unwrap()[0].clone() ;
+        static ref BashDescender: YamlDescender = YamlDescender::new_from_yaml(&YamlData, true).unwrap() ;
+        static ref ZshDescender: YamlDescender = YamlDescender::new_from_yaml(&YamlData, false).unwrap() ;
+
     }
 
-    fn get_descender() -> Box<dyn Descender<dyn Write>> {
-        Box::new(YamlDescender::new_from_file("test_data.yaml"))
-    }
-
-    fn input_output_check(input: &str, output: &str) {
-        let d = get_descender();
+    fn input_output_check<W: Write>(d: &dyn Descender<W>, input: &str, output: &str) {
         let mut result_buffer = StrWriter::new() ;
         d.write_completions(&mut result_buffer, &input, false).expect("write failed") ;
         let result_str = result_buffer.to_string().expect("write failed") ;
@@ -55,7 +53,7 @@ mod u_tests {
 
     #[test]
     fn test_empty() {
-        let d  = Box::new(YamlDescender::new(SOURCE1));
+        let d  = &BashDescender ;
         let mut output = BufWriter::new(Vec::new());
         d.write_completions(&mut output, "", false).expect("write failed") ;
         let s = String::from_utf8(output.into_inner().unwrap()).unwrap();
@@ -64,7 +62,7 @@ mod u_tests {
 
     #[test]
     fn test_one_path() {
-        let d  = Box::new(YamlDescender::new(SOURCE1));
+        let d  = Box::new(YamlDescender::new(SOURCE1, true));
         let mut output = BufWriter::new(Vec::new());
         d.write_completions(&mut output, "f", false).expect("write failed") ;
         let s = String::from_utf8(output.into_inner().unwrap()).unwrap();
@@ -74,12 +72,12 @@ mod u_tests {
 
     #[test]
     fn test_array1() {
-        input_output_check("array", "array@0\narray@1\narray@2\n") ;
+        input_output_check::<dyn Write>(BashDescender, "array", "array@0\narray@1\narray@2\n") ;
     }
     #[test]
     #[ignore]
     fn test_array2() {
-        input_output_check("array@2", "array@2@0\narray@2@1\narray@2@2\n") ;
+        input_output_check("array@2", "array@2@0\narray@2@1\narray@2@2\n", /* &str */) ;
     }
 
     #[test]
@@ -180,7 +178,7 @@ mod u_tests {
 
     #[test]
     fn test_parent_lookup() {
-        let doccer = YamlDescender::new(TEST_SOURCE);
+        let doccer = YamlDescender::new(TEST_SOURCE, true);
         let child = doccer.yaml_descend_path("parent_test.child2").unwrap();
         let description = doccer.get_field_or_parent(child, "description") ;
         assert_eq!(description, Ok(Yaml::String("foo".to_string()))) ;

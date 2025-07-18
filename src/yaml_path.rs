@@ -97,7 +97,7 @@ pub fn yaml_field_parent(root: &Yaml, yaml: &Yaml, field: &str) -> Result<Yaml, 
             }
             Ok(h[&ykey].clone())
         }
-        _ => Err(format!("{} is not a hash", path)),
+        _ => Err(format!("{:?} is not a hash", yaml)),
     }
 }
 
@@ -176,11 +176,5 @@ macro_rules! yaml_scalar {
             Err(e) => Err(e),
         }
     }};
-
-}
-
-#[macro_export]
-macro_rules! yaml_scalar_parent {
-
 
 }

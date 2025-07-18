@@ -1,10 +1,12 @@
+use crate::arrayparser::{ArrayParser, ZshArrayParser};
+use crate::arrayparser::BashArrayParser;
 use std::io::Write;
 use std::string::String;
 use yaml_rust::{Yaml, YamlLoader};
 use regex::Regex;
 use crate::descender::Descender;
 use crate::rust_common::{keys_starting_with, sep};
-use crate::yaml_path;
+use crate::{yaml_path, yaml_scalar};
 use crate::yaml_path::yaml_path;
 
 const  WHOLE_MATCH: usize = 0 ;
@@ -15,6 +17,7 @@ const ARRAY_MATCH: usize = 4;
 
 pub struct YamlDescender {
     docs: Vec<Yaml>,
+    ap: Box<dyn ArrayParser>,
     root: Yaml,
     re: Regex,
     parent_key: Yaml,
@@ -27,8 +30,14 @@ pub struct YamlDescender {
 impl YamlDescender {
     // traditional array accessor "([^.\[\]\\]+)(\.)?|(?:\[(\d+)]?)?"
     // more zsh friendly "([^.\[\]\\@]+)(\.)?|(?:@(\d+))?"
-    pub fn get_re() -> Regex {
-        Regex::new(r"([^.\[\]\\@]+)(\.)?|(?:@(\d+))?").unwrap()
+
+    fn get_ap(bash_or_zsh: bool) -> Box<dyn ArrayParser> {
+        if bash_or_zsh {
+            Box::new(BashArrayParser::new())
+        }
+        else {
+            Box::new(ZshArrayParser::new())
+        }
     }
 
     fn get_parent_key() -> Yaml {
@@ -39,49 +48,69 @@ impl YamlDescender {
         Yaml::String("description".to_string())
     }
 
-    pub fn new(docstr: &str) -> YamlDescender {
+    pub fn new(docstr: &str, bash_or_zsh: bool) -> YamlDescender {
         let docs = YamlLoader::load_from_str(docstr).expect("Failed to parse YAML");
 
-        let root = Yaml::String("".to_string());
-        let terminal_field = yaml_path(&docs[0], "completion-metadata.terminus").unwrap_or(Yaml::String("".to_string()));
+        let root = match yaml_path(&docs[0], "completion-metadata.root") {
+            Ok(y) => y,
+            Err(_) => Yaml::String("".to_string())
+        } ;
+
+        let terminal_field = match yaml_path(&docs[0], "completion-metadata.terminal_field") {
+            Ok(y) => y,
+            Err(_) => Yaml::String("".to_string())
+        } ;
+
         let has_terminus = terminal_field.as_str().unwrap() != "" ;
-        let re = YamlDescender::get_re() ;
         let parent_key = Self::get_parent_key();
+
+        let ap = Self::get_ap(bash_or_zsh) ;
+
         YamlDescender {
-            docs,
-            re, parent_key, root: root,
+            docs: docs,
+            re: ap.get_re(),
+            parent_key: parent_key,
+            root: root,
             description_key: Self::get_description_key(),
             terminal_field: terminal_field,
-            has_terminus: has_terminus
+            has_terminus: has_terminus,
+            ap: ap
         }
     }
 
-    pub fn new_from_file(path: &str) -> YamlDescender {
+    pub fn new_from_file(path: &str, bash_or_zsh: bool) -> YamlDescender {
         let docstr = std::fs::read_to_string(path)
             .expect(format!("Failed to read file: {}", path).as_str());
-        YamlDescender::new(&docstr)
+        YamlDescender::new(&docstr, bash_or_zsh)
     }
 
-    fn new_from_yaml(yaml: &Yaml) -> Result<YamlDescender, String> {
+    pub fn new_from_yaml(yaml: &Yaml, bash_or_zsh : bool ) -> Result<YamlDescender, String> {
+        let ap = Self::get_ap(bash_or_zsh) ;
         match yaml {
             Yaml::Hash(_h) => {
                 Ok(YamlDescender { docs: vec![yaml.clone()],
-                    re: Self::get_re(), parent_key: Self::get_parent_key(), root: Yaml::String("".to_string()),
+                    re: ap.get_re(),
+                    parent_key: Self::get_parent_key(),
+                    root: Yaml::String("".to_string()),
                     description_key: Self::get_description_key(),
-                    terminal_field: Yaml::String("".to_string()), has_terminus: false,
+                    terminal_field: Yaml::String("".to_string()),
+                    has_terminus: false,
+                    ap: ap
                 })
             }
             Yaml::Array(_a) => {
                 Ok(YamlDescender { docs: vec![yaml.clone()],
-                    re: Self::get_re(), parent_key: Self::get_parent_key(),
+                    re: ap.get_re(),
+                    parent_key: Self::get_parent_key(),
                     root: Yaml::String("".to_string()),
-                description_key: Self::get_description_key(),
-                    terminal_field: Yaml::String("".to_string()), has_terminus: false,
+                    description_key: Self::get_description_key(),
+                    terminal_field: Yaml::String("".to_string()),
+                    has_terminus: false,
+                    ap: ap
                 },)
             }
             _ => { return Err(String::from("cannot create from scalar types"))}
         }
-
     }
 
     pub fn yaml_descend_path(&self, path: &str) -> Result<&Yaml, String> {
@@ -239,11 +268,14 @@ impl Descender<dyn Write> for YamlDescender {
     {
         let mut path = ipath ;
         let doc = &self.docs[0] ;
-        let re = YamlDescender::get_re() ;
-        let mut current = if self.root.as_str().unwrap() == "" { doc } else { &doc.as_hash().unwrap()[&self.root] } ;
+        let re = &self.re ;
         let mut current_path = String::from("") ;
         let mut empty_path = true ;
         let mut match_iter = re.captures_iter(path).peekable();
+        let ap = &self.ap ;
+
+        let mut current = if self.root.as_str().unwrap() == "" { doc } else { &doc.as_hash().unwrap()[&self.root] } ;
+
 
         while let Some(captures) = match_iter.next() {
             let last = match_iter.peek().is_none();
@@ -255,7 +287,7 @@ impl Descender<dyn Write> for YamlDescender {
                 match current {
                     Yaml::Hash(hash) => {
                         let ykey = Yaml::String(key.to_string());
-                        // let key_vector = hash.iter().map(|(k,v)|k.as_str().unwrap() ).collect::<Vec<&str>>();
+                        let key_vector = hash.iter().map(|(k,v)|k.as_str().unwrap() ).collect::<Vec<&str>>();
 
                         if terminated {
                             // no need to search for members starting with key
@@ -343,14 +375,14 @@ impl Descender<dyn Write> for YamlDescender {
                                 return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "Index out of bounds"));
                             }
                             current = &array[index];
-                            current_path += format!("@{}", index).as_str();
+                            current_path += &ap.apply_index(index) ;
                             if !self.has_terminal_field(current) {
                                 current_path += sep(current, empty_path);
                             }
                             break;
                         }
                         if array.len() == 1 {
-                            current_path += "@0";
+                            current_path += &ap.apply_index(0);
                             empty_path = false;
                             current = &array[0];
                             if !self.has_terminal_field(current) {
@@ -361,10 +393,10 @@ impl Descender<dyn Write> for YamlDescender {
                         for (index, _) in array.iter().enumerate() {
                             let mut path2 = current_path.to_string();
 
-                            if path2.ends_with("@") {
+                            if ap.array_ending(&path2) {
                                 path2.truncate(path.len() - 1);
                             }
-                            let index_str = format!("@{}", index);
+                            let index_str = &ap.apply_index(index);
                             writer.write_fmt(format_args!("{}{}\n", path2, index_str))?;
                         }
                         return Ok(());
