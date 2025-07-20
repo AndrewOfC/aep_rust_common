@@ -5,33 +5,6 @@ use std::collections::HashSet;
 pub(crate) const KEY_MATCH: usize = 1 ;
 pub(crate) const INDEX_MATCH: usize = 3 ;
 
-#[macro_export] macro_rules! yaml_scalar {
-
-    ($d:expr, $path:expr, i64) => {
-        {
-            let yaml = $d.yaml_descend_path($path).unwrap().clone();
-            yaml.as_i64().unwrap()
-        }
-    } ;
-    ($d:expr, $path:expr, &str) => {
-        {
-            let yaml = $d.yaml_descend_path($path).unwrap().clone();
-            yaml.as_str().unwrap().to_string()
-        }
-    } ;
-    ($d:expr, $path:expr, bool) => {
-        {
-            let yaml = $d.yaml_descend_path($path).unwrap().clone();
-            yaml.as_bool().unwrap()
-        }
-    } ;
-    ($d:expr, $path:expr, f64) => {
-        {
-            let yaml = $d.yaml_descend_path($path).unwrap().clone();
-            yaml.as_f64().unwrap()
-        }
-    } ;
-}
 
 pub fn sep(y: &Yaml, empty_path: bool) -> &str {
     if empty_path { return "" ; }
