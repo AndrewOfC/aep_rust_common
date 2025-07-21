@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use crate::arrayparser::{ArrayParser, ZshArrayParser};
 use crate::arrayparser::BashArrayParser;
 use std::io::Write;
@@ -22,8 +23,14 @@ pub struct YamlDescender {
     re: Regex,
     parent_key: Yaml,
     description_key: Yaml,
-    terminal_field: Yaml,
-    has_terminus: bool,
+    terminal_field: HashSet<Yaml>
+}
+
+fn get_string_set(yaml: Yaml) -> Result<HashSet<Yaml>, String> {
+    match yaml {
+        Yaml::Array(a) => { Ok(HashSet::from_iter(a.iter().map(|y| y.clone())))  }
+        _ => Err(String::from("not an array"))
+    }
 }
 
 /// Descends into tree like objects such as yaml or (coming soon) json
@@ -56,14 +63,15 @@ impl YamlDescender {
             Err(_) => Yaml::String("".to_string())
         } ;
 
-        let terminal_field = match yaml_path(&docs[0], "completion-metadata.terminal_field") {
-            Ok(y) => y,
-            Err(_) => Yaml::String("".to_string())
+        let terminal_field = match yaml_path(&docs[0], "completion-metadata.terminal-fields") {
+            Ok(y) => match get_string_set(y) {
+                Ok(s) => s,
+                Err(s) => {return Err(format!("terminal-field: {}", s))}
+            }
+            Err(_) => { HashSet::new() }
         } ;
 
-        let has_terminus = terminal_field.as_str().unwrap() != "" ;
         let parent_key = Self::get_parent_key();
-
         let ap = Self::get_ap(bash_or_zsh) ;
 
         Ok(YamlDescender {
@@ -73,7 +81,6 @@ impl YamlDescender {
             root: root,
             description_key: Self::get_description_key(),
             terminal_field: terminal_field,
-            has_terminus: has_terminus,
             ap: ap
         })
     }
@@ -93,8 +100,7 @@ impl YamlDescender {
                     parent_key: Self::get_parent_key(),
                     root: Yaml::String("".to_string()),
                     description_key: Self::get_description_key(),
-                    terminal_field: Yaml::String("".to_string()),
-                    has_terminus: false,
+                    terminal_field: HashSet::new(),
                     ap: ap
                 })
             }
@@ -104,8 +110,7 @@ impl YamlDescender {
                     parent_key: Self::get_parent_key(),
                     root: Yaml::String("".to_string()),
                     description_key: Self::get_description_key(),
-                    terminal_field: Yaml::String("".to_string()),
-                    has_terminus: false,
+                    terminal_field: HashSet::new(),
                     ap: ap
                 },)
             }
@@ -185,6 +190,20 @@ impl YamlDescender {
         }
         Err(format!("field {} not found", field))
     }
+
+    fn has_terminal_field(&self, yaml: &Yaml) -> bool {
+        let h = match yaml.as_hash() {
+            Some(h) => h,
+            None => return false
+        } ;
+
+        for k in h.keys() {
+            if self.terminal_field.contains(k) {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 impl Descender<dyn Write> for YamlDescender {
@@ -254,15 +273,6 @@ impl Descender<dyn Write> for YamlDescender {
 
     }
 
-    fn has_terminal_field(&self, yaml: &Yaml) -> bool {
-        self.has_terminus && match yaml {
-            Yaml::Hash(h) => {
-                 h.contains_key(&self.terminal_field)
-            },
-            _ => { false }
-        }
-    }
-
     fn write_completions(&self, writer: &mut dyn Write, ipath: &str, add_descriptions: bool) -> std::io::Result<()>
     {
         let mut path = ipath ;
@@ -285,8 +295,11 @@ impl Descender<dyn Write> for YamlDescender {
             loop {
                 match current {
                     Yaml::Hash(hash) => {
+                        if self.has_terminal_field(current) {
+                            break ;
+                        }
                         let ykey = Yaml::String(key.to_string());
-                        let key_vector = hash.iter().map(|(k,v)|k.as_str().unwrap() ).collect::<Vec<&str>>();
+                        // let key_vector = hash.iter().map(|(k,v)|k.as_str().unwrap() ).collect::<Vec<&str>>();
 
                         if terminated {
                             // no need to search for members starting with key
