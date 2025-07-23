@@ -33,14 +33,37 @@ const INDEX_MATCH: usize = 3;
 const ARRAY_MATCH: usize = 4;
 
 lazy_static! {
-    static ref RE: Regex = Regex::new(r"([^.\[\]\\@]+)(\.)?|(?:@(\d+))?").unwrap();
+    static ref RE: Regex = Regex::new(r"([^.\[\]\\]+)(\.)?|(?:\[(\d+)]?)?").unwrap();
     static ref ParentKey : Yaml = Yaml::String("parent".to_string());
 }
 
 ///
 /// Extract a value from a yaml tree given a 'path'
 /// '.' will separate hash members
-/// '@n' where n is an index into a list
+/// '[n]' where n is an index into a list
+///
+/// # Example
+///
+/// ```rust
+/// use yaml_rust::Yaml;
+/// use yaml_rust::YamlLoader;
+/// use aep_rust_common::yaml_path::yaml_path;
+/// let s = r"---
+/// tree:
+///     array:
+///            - field: 3
+/// " ;
+///
+/// let yaml = &YamlLoader::load_from_str(s).unwrap()[0] ;
+/// let n = match yaml_path(yaml, "tree.array[0].field").unwrap() {
+///    Yaml::Integer(i) => i,
+///    _ => panic!("expected an int")
+/// } ;
+///
+/// assert_eq!(n, 3) ;
+///
+///
+/// ```
 ///
 pub fn yaml_path(yaml: &Yaml, path: &str) -> Result<Yaml, String> {
     let mut current = yaml;

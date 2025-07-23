@@ -28,6 +28,6 @@ pub mod descender;
 mod get_metadata;
 mod unittests;
 mod strwriter;
-mod yaml_path;
+pub mod yaml_path;
 mod arrayparser;
 

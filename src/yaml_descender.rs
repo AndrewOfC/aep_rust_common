@@ -30,7 +30,6 @@ use yaml_rust::{Yaml, YamlLoader};
 use regex::Regex;
 use crate::descender::Descender;
 use crate::rust_common::{keys_starting_with, sep};
-use crate::{yaml_path, yaml_scalar};
 use crate::yaml_path::yaml_path;
 
 const  WHOLE_MATCH: usize = 0 ;
@@ -46,7 +45,7 @@ pub struct YamlDescender {
     re: Regex,
     parent_key: Yaml,
     description_key: Yaml,
-    terminal_field: HashSet<Yaml>
+    terminal_fields: HashSet<Yaml>
 }
 
 fn get_string_set(yaml: Yaml) -> Result<HashSet<Yaml>, String> {
@@ -78,15 +77,25 @@ impl YamlDescender {
         Yaml::String("description".to_string())
     }
 
+    ///
+    /// Create a descender from a string
+    ///
+    /// # Arguments
+    ///   docstr:
+    ///     string as yaml data
+    ///   bash_or_zsh bool
+    ///     - true - arrays are indexed with [index]
+    ///     - false - arrays are indexed as @index
+    ///
     pub fn new(docstr: &str, bash_or_zsh: bool) -> Result<YamlDescender, String> {
-        let docs = YamlLoader::load_from_str(docstr).expect("Failed to parse YAML");
-
-        let root = match yaml_path(&docs[0], "completion-metadata.root") {
-            Ok(y) => y,
-            Err(_) => Yaml::String("".to_string())
+        let docs = match YamlLoader::load_from_str(docstr) {
+            Ok(d) => d,
+            Err(e) => return Err(format!("failed to parse yaml: {}", e))
         } ;
 
-        let terminal_field = match yaml_path(&docs[0], "completion-metadata.terminal-fields") {
+        let root = yaml_path(&docs[0], "completion-metadata.root").unwrap_or_else(|_| Yaml::String("".to_string()));
+
+        let terminal_fields = match yaml_path(&docs[0], "completion-metadata.terminal-fields") {
             Ok(y) => match get_string_set(y) {
                 Ok(s) => s,
                 Err(s) => {return Err(format!("terminal-field: {}", s))}
@@ -98,19 +107,24 @@ impl YamlDescender {
         let ap = Self::get_ap(bash_or_zsh) ;
 
         Ok(YamlDescender {
-            docs: docs,
+            docs,
             re: ap.get_re(),
-            parent_key: parent_key,
-            root: root,
+            parent_key,
+            root,
             description_key: Self::get_description_key(),
-            terminal_field: terminal_field,
-            ap: ap
+            terminal_fields,
+            ap
         })
     }
 
+    ///
+    /// Create a descender from a file
+    ///
     pub fn new_from_file(path: &str, bash_or_zsh: bool) -> Result<YamlDescender, String> {
-        let docstr = std::fs::read_to_string(path)
-            .expect(format!("Failed to read file: {}", path).as_str());
+        let docstr = match std::fs::read_to_string(path) {
+            Ok(d) => d,
+            Err(e) => return Err(format!("failed to read file: {}", e))
+        } ;
         YamlDescender::new(&docstr, bash_or_zsh)
     }
 
@@ -123,7 +137,7 @@ impl YamlDescender {
                     parent_key: Self::get_parent_key(),
                     root: Yaml::String("".to_string()),
                     description_key: Self::get_description_key(),
-                    terminal_field: HashSet::new(),
+                    terminal_fields: HashSet::new(),
                     ap: ap
                 })
             }
@@ -133,7 +147,7 @@ impl YamlDescender {
                     parent_key: Self::get_parent_key(),
                     root: Yaml::String("".to_string()),
                     description_key: Self::get_description_key(),
-                    terminal_field: HashSet::new(),
+                    terminal_fields: HashSet::new(),
                     ap: ap
                 },)
             }
@@ -141,6 +155,31 @@ impl YamlDescender {
         }
     }
 
+    ///
+    /// Given a path to an item consisting of key1.key2[0] into a YAML tree such as:
+    /// return the item as a YAML entity.
+    /// # Example
+    /// ```rust
+    /// use yaml_rust::Yaml;
+    /// use aep_rust_common::yaml_descender::YamlDescender;
+    /// let s = r"---
+    ///  tree:
+    ///    sub-array:
+    ///            - one
+    ///            - two
+    ///            - three: 3
+    ///              six: 6
+    ///              nine: 9
+    /// " ;
+    ///   let descender = YamlDescender::new(&s, true).unwrap() ;
+    ///   let x = match descender.yaml_descend_path("tree.sub-array[2].nine").unwrap() {
+    ///      Yaml::Integer(i) => i,
+    ///      _ => panic!("expected an int")
+    ///   } ;
+    ///   assert_eq!(*x, 9) ;
+    ///
+    /// ```
+    ///
     pub fn yaml_descend_path(&self, path: &str) -> Result<&Yaml, String> {
         let re = &self.re ;
         let mut current = &self.docs[0];
@@ -148,7 +187,7 @@ impl YamlDescender {
             return Ok(current);
         }
 
-        if self.root.as_str().unwrap() != "" {
+        if self.root.as_str().unwrap_or("") != "" {
             match current {
                 Yaml::Hash(h) => {
                     let ykey = Yaml::String(self.root.as_str().unwrap().to_string());
@@ -193,6 +232,31 @@ impl YamlDescender {
         Ok(current)
     }
 
+    ///
+    /// In a YAML hash extract the given field.  If not found in the hash,
+    /// if the hash has a 'parent' field, get the parent in the 'root'
+    /// document specified by a path and check for the field there.
+    /// This is done recursively.
+    ///
+    /// # Example
+    /// ```rust
+    /// let s = r"tree:
+    ///   parent2:
+    ///     key: value
+    /// parent1:
+    ///   parent: tree.parent2
+    /// child:
+    ///   parent: parent1" ;
+    ///
+    ///  use aep_rust_common::descender::Descender;
+    /// use aep_rust_common::yaml_descender::YamlDescender;
+    ///  let descender = YamlDescender::new(s, true).unwrap() ;
+    ///  let s = descender.get_string_field_or_parent("child", "key").unwrap() ;
+    ///  assert_eq!(s, "value") ;
+    ///
+    /// ```
+    ///
+    ///
     pub fn get_field_or_parent(&self, child: &Yaml, field: &str) -> Result<Yaml, String> {
 
         let h = match child {
@@ -201,14 +265,18 @@ impl YamlDescender {
         } ;
         let field_key = Yaml::String(String::from(field)); // todo move to metadata or other persistent struct
 
-        
         // let keyvector = h.keys().collect::<Vec<&Yaml>>();
-
         if h.contains_key(&field_key) {
             return Ok(h[&field_key].clone());
         } else if h.contains_key(&self.parent_key) {
-            let parent_path = h[&self.parent_key].as_str().unwrap();
-            let parent= self.yaml_descend_path(parent_path).unwrap() ;
+            let parent_path = match &h[&self.parent_key] {
+                Yaml::String(s) => s.as_str(),
+                _ => return Err("parent is not a string".parse().unwrap())
+            } ;
+            let parent= match self.yaml_descend_path(parent_path) {
+                Ok(yaml) => yaml,
+                Err(e) => return Err(e)
+            } ;
             return self.get_field_or_parent(parent, field);
         }
         Err(format!("field {} not found", field))
@@ -221,7 +289,7 @@ impl YamlDescender {
         } ;
 
         for k in h.keys() {
-            if self.terminal_field.contains(k) {
+            if self.terminal_fields.contains(k) {
                 return true;
             }
         }
@@ -255,7 +323,7 @@ impl Descender<dyn Write> for YamlDescender {
     fn get_int_field_or_parent(&self, path: &str, field: &str) -> Result<i64, String> {
         let child = match self.yaml_descend_path(path) {
             Ok(yaml) => yaml,
-            Err(e) => return Err(format!("{}.{} not found", path, field))
+            Err(_) => return Err(format!("{}.{} not found", path, field))
         };
         let value_r = self.get_field_or_parent(&child, field) ;
         match value_r {
@@ -368,7 +436,6 @@ impl Descender<dyn Write> for YamlDescender {
                             continue;
                         }
 
-                        let sep = sep(current, empty_path);
                         let mut has_descriptions = add_descriptions ;
                         let mut completions:Vec<String> = Vec::new() ;
                         let mut descriptions:Vec<String> = Vec::new() ;

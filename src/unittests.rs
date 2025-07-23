@@ -39,7 +39,7 @@ mod u_tests {
     use crate::unittests::SOURCE1;
     use crate::yaml_descender::YamlDescender;
     use crate::{yaml_scalar};
-    use std::io::{BufWriter, Write};
+    use std::io::{BufWriter};
     use lazy_static::lazy_static;
     use yaml_rust::{Yaml, YamlLoader};
 
@@ -100,7 +100,7 @@ mod u_tests {
     #[test]
     #[ignore]
     fn test_array2() {
-        input_output_check(&BashDescender, "array@2", "array@2@0\narray@2@1\narray@2@2\n");
+        input_output_check(&BashDescender, "array[2]", "array[2][0]\narray[2][1]\narray[2][2]\n");
     }
 
     #[test]
@@ -148,24 +148,24 @@ mod u_tests {
     #[test]
     fn test_path() {
 
-        let i = yaml_scalar!(&YamlData, "root.array@0.number", i64);
+        let i = yaml_scalar!(&YamlData, "root.array[0].number", i64);
         assert_eq!(i, Ok(4)) ;
-        let i2 = yaml_scalar!(&YamlData, "root.array@0", "number", i64);
+        let i2 = yaml_scalar!(&YamlData, "root.array[0]", "number", i64);
         assert_eq!(i2, Ok(4)) ;
 
-        let s = yaml_scalar!(&YamlData, "root.array@0.string", String) ;
+        let s = yaml_scalar!(&YamlData, "root.array[0].string", String) ;
         assert_eq!(s, Ok("str".to_string())) ;
-        let s2 = yaml_scalar!(&YamlData, "root.array@0", "string", String) ;
+        let s2 = yaml_scalar!(&YamlData, "root.array[0]", "string", String) ;
         assert_eq!(s2, Ok("str".to_string())) ;
 
-        let b = yaml_scalar!(&YamlData, "root.array@0.bool", bool) ;
+        let b = yaml_scalar!(&YamlData, "root.array[0].bool", bool) ;
         assert_eq!(b, Ok(true)) ;
-        let b2 = yaml_scalar!(&YamlData, "root.array@0", "bool", bool) ;
+        let b2 = yaml_scalar!(&YamlData, "root.array[0]", "bool", bool) ;
         assert_eq!(b2, Ok(true)) ;
 
-        let f = yaml_scalar!(&YamlData, "root.array@0.real", f64) ;
+        let f = yaml_scalar!(&YamlData, "root.array[0].real", f64) ;
         assert_eq!(f, Ok(2.0)) ;
-        let f2 = yaml_scalar!(&YamlData, "root.array@0", "real", f64) ;
+        let f2 = yaml_scalar!(&YamlData, "root.array[0]", "real", f64) ;
         assert_eq!(f2, Ok(2.0)) ;
     }
 
@@ -173,7 +173,7 @@ mod u_tests {
     #[should_panic]
     fn test_safe_path_error() {
         let yaml =  &YamlData ;
-        let f = yaml_scalar!(yaml, "foo.array@0.real", f64) ;
+        let f = yaml_scalar!(yaml, "foo.array[0].real", f64) ;
         assert_eq!(f.unwrap(), 2.0) ;
     }
 
@@ -184,22 +184,22 @@ mod u_tests {
         let _i = yaml_scalar!(yaml, "root.array.number", i64).unwrap();
     }
     #[test]
-    #[should_panic(expected = "root.array@0.number@1 1 is not an array")]
+    #[should_panic(expected = "root.array[0].number[1] 1 is not an array")]
     fn test_badvalue_array() {
         let yaml = &YamlData ;
-        let _i = yaml_scalar!(yaml, "root.array@0.number@1", i64).unwrap();
+        let _i = yaml_scalar!(yaml, "root.array[0].number[1]", i64).unwrap();
     }
 
     #[test]
-    #[should_panic(expected = "numberX not found in root.array@0.numberX")]
+    #[should_panic(expected = "numberX not found in root.array[0].numberX")]
     fn test_nosuch_member() {
-        let _i = crate::yaml_scalar!(&YamlData, "root.array@0.numberX", i64).unwrap();
+        let _i = yaml_scalar!(&YamlData, "root.array[0].numberX", i64).unwrap();
     }
 
     #[test]
-    #[should_panic(expected = "100 is out of bounds in root.array@100.number")]
+    #[should_panic(expected = "100 is out of bounds in root.array[100].number")]
     fn test_nosuch_index() {
-        let _i = crate::yaml_scalar!(&YamlData, "root.array@100.number", i64).unwrap();
+        let _i = yaml_scalar!(&YamlData, "root.array[100].number", i64).unwrap();
     }
 
     #[test]
@@ -216,4 +216,25 @@ mod u_tests {
         let _bogus = find_config_file("foo", "bar").unwrap() ;
     }
 
+
+    #[test]
+    fn test_yaml_descend_path() {
+        let s = r"---
+     tree:
+       sub-array:
+               - one
+               - two
+               - three: 3
+                 six: 6
+                 nine: 9
+    ";
+          let descender = YamlDescender::new(&s, true).unwrap() ;
+          let x = match descender.yaml_descend_path("tree.sub-array[2].nine").unwrap() {
+             Yaml::Integer(i) => i,
+             _ => panic!("expected an int")
+          } ;
+          assert_eq!(*x, 9) ;
+
+
+    }
 }
