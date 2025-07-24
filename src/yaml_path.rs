@@ -148,6 +148,29 @@ pub fn yaml_field_parent(root: &Yaml, yaml: &Yaml, field: &str) -> Result<Yaml, 
 }
 
 /// extract a value in the rustiest way possible
+///
+/// # Example
+/// ```rust
+/// use yaml_rust::YamlLoader;
+/// use aep_rust_common::yaml_path::yaml_path;
+/// #[macro_use]
+/// use aep_rust_common::yaml_scalar;
+/// let s = r"---
+/// root:
+///     - record:
+///         field: value
+///     - record:
+///         field: value2
+/// " ;
+/// let y = &YamlLoader::load_from_str(s).unwrap()[0] ;
+/// let s2 = yaml_scalar!(y, "root[1].record.field", String).unwrap() ;
+///
+/// assert_eq!(s2, "value2") ;
+///
+///
+/// ```
+///
+///
 #[macro_export]
 macro_rules! yaml_scalar {
     ($yaml:expr, $path:expr, f64) => {{
