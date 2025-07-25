@@ -25,9 +25,6 @@ use yaml_rust::Yaml;
 use yaml_rust::yaml::Hash;
 use std::collections::HashSet;
 
-pub(crate) const KEY_MATCH: usize = 1 ;
-pub(crate) const INDEX_MATCH: usize = 3 ;
-
 
 pub fn sep(y: &Yaml, empty_path: bool) -> &str {
     if empty_path { return "" ; }

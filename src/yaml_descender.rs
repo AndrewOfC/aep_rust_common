@@ -32,11 +32,9 @@ use crate::descender::Descender;
 use crate::rust_common::{keys_starting_with, sep};
 use crate::yaml_path::yaml_path;
 
-const  WHOLE_MATCH: usize = 0 ;
 const KEY_MATCH: usize = 1 ;
 const PERIOD_MATCH: usize = 2 ;
 const INDEX_MATCH: usize = 3 ;
-const ARRAY_MATCH: usize = 4;
 
 pub struct YamlDescender {
     docs: Vec<Yaml>,
@@ -263,7 +261,7 @@ impl YamlDescender {
             Yaml::Hash(h) => h,
             _ => return Err(format!("{} is not a hash", field))
         } ;
-        let field_key = Yaml::String(String::from(field)); // todo move to metadata or other persistent struct
+        let field_key = Yaml::String(String::from(field));
 
         // let keyvector = h.keys().collect::<Vec<&Yaml>>();
         if h.contains_key(&field_key) {
@@ -414,7 +412,6 @@ impl Descender<dyn Write> for YamlDescender {
                             let ykey = keys[0];
                             if hash.contains_key(ykey) {
                                 current = &hash[ykey];
-                                key = ykey.as_str().unwrap();
                                 current_path += ykey.as_str().unwrap();
                                 empty_path = false;
                                 if !self.has_terminal_field(current) {
@@ -515,7 +512,7 @@ impl Descender<dyn Write> for YamlDescender {
         match yaml {
             Yaml::Hash(h) => {
                 if h.contains_key(&self.description_key) {
-                    let description : &str = match h[&self.description_key].as_str() {
+                    match h[&self.description_key].as_str() {
                         Some(s) => return Ok(s.to_string()),
                         None => {return Err("description is not a string".to_string()) ;}
                     } ;

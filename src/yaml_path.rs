@@ -23,14 +23,10 @@
 // 
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::thread::current;
 use yaml_rust::Yaml;
 
-const WHOLE_MATCH: usize = 0;
 const KEY_MATCH: usize = 1;
-const PERIOD_MATCH: usize = 2;
 const INDEX_MATCH: usize = 3;
-const ARRAY_MATCH: usize = 4;
 
 lazy_static! {
     static ref RE: Regex = Regex::new(r"([^.\[\]\\]+)(\.)?|(?:\[(\d+)]?)?").unwrap();
