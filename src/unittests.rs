@@ -1,4 +1,4 @@
-// 
+//
 // SPDX-License-Identifier: MIT
 // 
 // Copyright (c) 2025 Andrew Ellis Page
@@ -20,30 +20,13 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-// 
-const SOURCE1: &str = r#"---
-field1:
-    field1a: value1
-    field1b: value2
+//
 
-field2: foo
+use lazy_static::lazy_static;
+use yaml_rust::{Yaml, YamlLoader};
+use crate::yaml_descender::YamlDescender;
 
-"# ;
-
-mod u_tests {
-    use crate::yaml_path::yaml_path_field;
-    use crate::yaml_path::yaml_path;
-    use crate::descender::Descender;
-    use crate::find_config_file::find_config_file;
-    use crate::strwriter::StrWriter;
-    use crate::unittests::SOURCE1;
-    use crate::yaml_descender::YamlDescender;
-    use crate::{yaml_scalar};
-    use std::io::{BufWriter};
-    use lazy_static::lazy_static;
-    use yaml_rust::{Yaml, YamlLoader};
-
-    const TEST_SOURCE:&str = r"---
+const TEST_SOURCE:&str = r"---
         root:
             array:
                 - string: str
@@ -59,12 +42,33 @@ mod u_tests {
             child2:
                 parent: parent_test.child1
 " ;
-
-    lazy_static! {
+lazy_static! {
         static ref YamlData: Yaml = YamlLoader::load_from_str(TEST_SOURCE).unwrap()[0].clone() ;
         static ref ZshDescender:YamlDescender =    YamlDescender::new_from_file("test_data.yaml", false).unwrap() ;
         static ref BashDescender: YamlDescender =  YamlDescender::new_from_file("test_data.yaml", true).unwrap() ;
     }
+
+#[cfg(test)]
+mod u_tests {
+    use crate::yaml_path::yaml_path_field;
+    use crate::yaml_path::yaml_path;
+    use crate::descender::Descender;
+    use crate::find_config_file::find_config_file;
+    use crate::yaml_descender::YamlDescender;
+    use crate::yaml_scalar;
+    use yaml_rust::Yaml;
+    use crate::strwriter::strwriter::StrWriter;
+    use crate::unittests::{BashDescender, YamlData, ZshDescender, TEST_SOURCE};
+
+    const SOURCE1: &str = r#"---
+field1:
+    field1a: value1
+    field1b: value2
+
+field2: foo
+
+"# ;
+
 
     fn input_output_check(d: &YamlDescender, input: &str, output: &str) {
         let mut result_buffer = StrWriter::new() ;
@@ -76,19 +80,17 @@ mod u_tests {
     #[test]
     fn test_empty() {
         let d  = &BashDescender ;
-        let mut output = BufWriter::new(Vec::new());
+        let mut output = StrWriter::new() ;
         d.write_completions(&mut output, "", false).expect("write failed") ;
-        let s = String::from_utf8(output.into_inner().unwrap()).unwrap();
-        assert_eq!(s, "GPIO\narray\nlevel1\nlevel1b\nlevel1c\nulevel\nxlevel\n");
+        assert_eq!(output.to_string().unwrap(), "GPIO\narray\nlevel1\nlevel1b\nlevel1c\nulevel\nxlevel\n");
     }
 
     #[test]
     fn test_one_path() {
         let d  = Box::new(YamlDescender::new(SOURCE1, true).unwrap());
-        let mut output = BufWriter::new(Vec::new());
+        let mut output = StrWriter::new();
         d.write_completions(&mut output, "f", false).expect("write failed") ;
-        let s = String::from_utf8(output.into_inner().unwrap()).unwrap();
-        assert_eq!(s, "field1\nfield2\n");
+        assert_eq!(output.to_string().unwrap(), "field1\nfield2\n");
     }
 
 

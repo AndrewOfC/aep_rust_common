@@ -5,7 +5,7 @@
 
 A rust object that descends through yaml trees based on a 'path' syntax
 
-Code here is used in both [register_tool](https://github.com/AndrewOfC/register_tool) and [ucompleter](https://github.com/AndrewOfC/ucompleter).  In a effort to avoid duplication
+Code here is used in both [register_tool](https://github.com/AndrewOfC/register_tool) and [ucompleter](https://github.com/AndrewOfC/ucompleter).  In an effort to avoid duplication
 and mantain consistency this repo was created.
 
 # Concepts

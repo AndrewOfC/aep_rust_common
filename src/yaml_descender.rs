@@ -525,9 +525,9 @@ impl Descender<dyn Write> for YamlDescender {
                     } ;
                     return self.get_description(&parent);
                 }
-                return Err("no description found".to_string());
+                Err("no description found".to_string())
             }
-            _ => return Err(format!("{:?} is not a hash", yaml))
+            _ => Err(format!("{:?} is not a hash", yaml))
         }
 
     }
